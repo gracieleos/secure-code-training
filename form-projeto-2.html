@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self';
+        script-src 'self' 'unsafe-inline';
+        style-src 'self' 'unsafe-inline';
+        object-src 'none';
+        frame-ancestors 'none';">
+    <title>Acme Corporation</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        /* Estilo para indicar visualmente campos inválidos de acordo com a validação HTML5 */
+        input:invalid { border-color: red; }
+    </style>
+</head>
+<body>
+    <h2>Formulário Agora Seguro </h2>
+    <form id="cadastro">
+        <label for="nome">Nome:</label>
+        <input id="nome" name="nome" required>
+        <br><br>
+        <label for="email">E-mail:</label>
+        <input id="email" name="email" type="email" required>
+        <br><br>
+        <label for="telefone">Telefone:</label>
+        <input id="telefone" name="telefone" type="tel" required>
+        <br><br>
+        <button type="submit">Salvar!</button>
+    </form>
+
+    <script>
+        // Função para sanitizar strings e prevenir XSS, convertendo caracteres especiais em entidades HTML.
+        function sanitizeHTML(texto) {
+            if (texto === null || texto === undefined) return ''; // Trata valores nulos ou indefinidos
+            return String(texto)
+                .replace(/&/g, '&amp;')  // E comercial
+                .replace(/</g, '&lt;')   // Menor que (inicio de tag)
+                .replace(/>/g, '&gt;')   // Maior que (fim de tag)
+                .replace(/"/g, '&quot;') // Aspas duplas
+                .replace(/'/g, '&#39;');  // Aspas simples (ou &apos;)
+        }
+
+        document.getElementById("cadastro").addEventListener("submit", function(event) {
+            event.preventDefault(); // Previne o comportamento padrão de submissão do formulário, que recarregaria a página.
+
+            let nomeInput = document.getElementById("nome");
+            let emailInput = document.getElementById("email");
+            let telefoneInput = document.getElementById("telefone");
+
+            /**
+             * Vulnerabilidade Corrigida: Falta de Validação Básica de Entrada (JavaScript).
+             * Detalhe da Vulnerabilidade: Mesmo com validações HTML, um usuário mal-intencionado
+             * poderia desabilitá-las ou enviar requisições HTTP diretamente. Além disso, validações HTML
+             * podem não cobrir todos os casos (ex: um campo 'required' preenchido apenas com espaços).
+             * Detalhe da Correção: Esta seção implementa uma validação do lado do cliente em JavaScript
+             * como uma segunda camada de defesa.
+             * - `.trim()`: Remove espaços em branco no início e no fim das strings. Se o usuário digitar apenas espaços,
+             * o campo será considerado vazio após o trim.
+             * - `.checkValidity()`: Dispara a validação HTML5 programaticamente e retorna true se válido.
+             * Isso respeita atributos como 'required' e 'type="email"'.
+             * - Verificação explícita `!nome`, `!email`, `!telefone`: Garante que após o trim, os campos não ficaram vazios.
+             * Se alguma validação falhar, uma mensagem é exibida e o processamento é interrompido.
+             */
+            let nome = nomeInput.value.trim();
+            let email = emailInput.value.trim();
+            let telefone = telefoneInput.value.trim();
+
+            // Reseta estilos de erro de validações anteriores para um novo feedback visual.
+            nomeInput.style.borderColor = '';
+            emailInput.style.borderColor = '';
+            telefoneInput.style.borderColor = '';
+
+            let ehValido = true;
+            if (!nomeInput.checkValidity() || !nome) {
+                nomeInput.style.borderColor = 'red'; // Indica visualmente o campo inválido
+                ehValido = false;
+            }
+            if (!emailInput.checkValidity() || !email) {
+                emailInput.style.borderColor = 'red';
+                ehValido = false;
+            }
+            if (!telefoneInput.checkValidity() || !telefone) {
+                telefoneInput.style.borderColor = 'red';
+                ehValido = false;
+            }
+
+            if (!ehValido) {
+                alert("Por favor, preencha todos os campos corretamente.");
+                return; // Interrompe a execução da função se houver erros de validação.
+            }
+
+            // Recupera os dados existentes do localStorage ou inicia um array vazio se não houver dados.
+            let dados = localStorage.getItem("cadastro_local") ? JSON.parse(localStorage.getItem("cadastro_local")) : [];
+            dados.push({ nome, email, telefone }); // Adiciona os novos dados (já validados) ao array.
+            localStorage.setItem("cadastro_local", JSON.stringify(dados)); // Salva o array atualizado de volta no localStorage.
+
+            /**
+             * Vulnerabilidade Corrigida: Cross-Site Scripting (XSS) na exibição de dados.
+             * Detalhe da Vulnerabilidade: Ao construir o HTML da nova página (`novaPaginaHTML`),
+             * os valores de `d.nome`, `d.email`, `d.telefone` (que vieram da entrada do usuário e foram
+             * armazenados no localStorage) eram inseridos diretamente na string HTML. Se algum desses valores
+             * contivesse código JavaScript malicioso (ex: <img src=x onerror=alert('XSS')>),
+             * esse código seria executado no contexto da nova aba quando o HTML fosse renderizado.
+             * Detalhe da Correção: A função `sanitizeHTML()` é chamada para cada um dos valores
+             * (`d.nome`, `d.email`, `d.telefone`) antes de serem concatenados na string HTML.
+             * Como explicado na definição da função `sanitizeHTML`, isso converte os caracteres
+             * especiais de HTML em suas entidades, impedindo que o navegador os interprete como
+             * código executável. Assim, os dados são exibidos como texto puro e inofensivo.
+             */
+            let novaPaginaHTML = `
+                <!DOCTYPE html>
+                <html lang="pt">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Dados Cadastrados</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        table { width: 100%; border-collapse: collapse; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Dados Cadastrados</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>E-mail</th>
+                                <th>Telefone</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${dados.map(d => `<tr><td>${sanitizeHTML(d.nome)}</td><td>${sanitizeHTML(d.email)}</td><td>${sanitizeHTML(d.telefone)}</td></tr>`).join("")}
+                        </tbody>
+                    </table>
+                    <script>
+                        // Para aumentar um pouco a segurança contra tabnabbing,
+                        // caso esta página pudesse ser comprometida por um XSS muito específico
+                        // que bypassasse as outras proteções, poderíamos tentar remover a referência
+                        // da janela que abriu esta ('opener').
+                        if (window.opener) {
+                            window.opener = null;
+                            window.addEventListener('beforeunload', function() {
+                                window.opener = null;
+                            });
+                        }
+                    <\/script>
+                </body>
+                </html>
+            `;
+        }); // Fecha o addEventListener
+    </script>
+</body>
+</html>
